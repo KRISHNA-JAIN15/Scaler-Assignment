@@ -8,6 +8,7 @@ Then open http://localhost:8000
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -16,8 +17,20 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.api.routes import router as api_router
+from app.core.detectors.ner_detector import get_nlp
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load spaCy's model during process startup instead of on the first
+    # redaction request. Hosts like Azure App Service cap request duration
+    # at a fixed ~230s regardless of app-level timeouts, so the multi-second
+    # model load was otherwise coming straight out of that same budget on
+    # every cold worker's first real request.
+    get_nlp()
+    yield
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -41,6 +54,7 @@ app = FastAPI(
     title="PII Redaction Tool",
     description="Upload a document, get back a PII-redacted .docx",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # The frontend may be hosted on a different origin than the API (e.g. a
