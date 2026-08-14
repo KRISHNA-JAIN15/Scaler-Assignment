@@ -275,6 +275,7 @@ $("uploadForm").addEventListener("submit", async (e) => {
   body.append("file", file);
   body.append("issuer_names", $("issuerNames").value);
   body.append("redact_issuer", $("redactIssuer").checked ? "true" : "false");
+  body.append("verify", $("verifyOutput").checked ? "true" : "false");
   body.append("disable_types", disabled);
 
   const controller = new AbortController();

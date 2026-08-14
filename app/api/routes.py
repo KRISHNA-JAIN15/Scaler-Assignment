@@ -8,6 +8,9 @@ POST /api/redact
                                  name/aliases to KEEP unredacted
       redact_issuer (optional)- "true" to redact the issuer/subject company too
       disable_types (optional)- comma-separated PII types to turn off
+      verify (optional)       - "false" to skip the residual scan (roughly halves
+                                 processing time; recommended on CPU-constrained
+                                 hosting). Defaults to "true".
     -> returns the redacted .docx as a file download, with a JSON summary
        of what was redacted in the `X-Redaction-Summary` response header.
 
@@ -87,6 +90,7 @@ async def redact_endpoint(
     issuer_names: str = Form(""),
     redact_issuer: str = Form("false"),
     disable_types: str = Form(""),
+    verify: str = Form("true"),
 ):
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in SUPPORTED_EXTENSIONS:
@@ -169,12 +173,25 @@ async def redact_endpoint(
             detail="Server is busy processing other redaction jobs. Please try again shortly.",
         )
 
+    verify_bool = verify.strip().lower() not in ("false", "0", "no")
+
     try:
         # Redaction is CPU-bound and runs for tens of seconds on a large
         # document. Calling it directly inside an async endpoint would block
         # the event loop and freeze the server for every other request for
         # the whole job, so hand it to a worker thread.
-        result = await run_in_threadpool(redact_file, input_path, output_path, redactor)
+        #
+        # Verification (see document_io.redact_file / verification.py)
+        # re-runs detection over the whole finished document as a second
+        # pass, which roughly doubles wall-clock time -- a fine trade on a
+        # full-power dev machine, a much rougher one on constrained hosting
+        # (e.g. Render's free tier, where a heavily-throttled shared CPU can
+        # turn an 80s job into several minutes). Defaults to on; callers
+        # that need a faster turnaround on a large document can pass
+        # `verify=false` and rely on the primary detection pass alone.
+        result = await run_in_threadpool(
+            redact_file, input_path, output_path, redactor, verify_bool
+        )
     except Exception as e:
         _cleanup(work_dir)
         raise HTTPException(status_code=422, detail=f"Could not process file: {e}")
