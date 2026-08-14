@@ -9,6 +9,35 @@ password-protected web UI.
 Built for and evaluated against a real 1.8 MB Indian IPO filing (a Red
 Herring Prospectus: 692 paragraphs, 76 tables, 1,006 body elements).
 
+## Summary
+
+**Approach:** a hybrid engine — regex **plus real validation** (Luhn
+checksum, libphonenumber parsing, SSN area rules, IFSC/GSTIN structural
+checks) for structured PII, and **spaCy NER** (`en_core_web_sm`) for
+unstructured PII (names, organisations, addresses), with a stoplist parsed
+from the document's own "Definitions" glossary so legal terms like "Equity
+Shares" aren't mistaken for a company. Fake replacements are generated with
+**Faker**, cached per `(type, original value)` so the same person, company or
+number reads as the same fake everywhere; `python-docx` preserves formatting
+run-by-run, and `pdfplumber` handles PDF input.
+
+**Tradeoffs and known false positives/negatives** (measured, not guessed —
+see `EVALUATION.md` §3 for every individual error): the largest **false
+negative** is a single-word brand name with no corporate suffix (e.g.
+"CareEdge") — nothing structurally separates it from an ordinary capitalised
+noun, and a broader sweep was tried and produced far more false positives
+than it fixed; an address with neither a PIN code nor a lead-in phrase is
+also missed. The main **false positive** source is spaCy occasionally tagging
+institutional/legal phrasing as an organisation ("ICDR Master Circular") —
+ordinary NER imprecision on formal prose, never personal data. Reference
+numbers (order/ticket/invoice, ISIN, CIN, SEBI registration numbers) are
+**deliberately not redacted** — they identify a transaction or filing, not a
+person — and the filing's own subject company name is kept by default, since
+a prospectus is inherently about that company.
+
+Full methodology and per-type numbers are in [`EVALUATION.md`](EVALUATION.md);
+the architecture and every design decision are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ```bash
 python cli.py --input "Red Herring Prospectus.docx" \
               --output "output/Red Herring Prospectus_redacted.docx" \
