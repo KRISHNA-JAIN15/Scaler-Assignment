@@ -1,5 +1,10 @@
 fastapi==0.141.1
 uvicorn[standard]==0.52.1
+# Azure App Service's Linux/Oryx build expects a gunicorn entrypoint for
+# Python web apps; the uvicorn worker class lets it still run our ASGI app.
+# Unused by Render (which invokes uvicorn directly via Procfile) but harmless
+# there.
+gunicorn==23.0.0
 python-multipart==0.0.32
 python-docx==1.2.0
 Faker==40.36.0
